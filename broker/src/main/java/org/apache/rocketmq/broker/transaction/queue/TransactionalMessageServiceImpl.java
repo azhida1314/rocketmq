@@ -148,7 +148,7 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
                             halfOffset, opOffset);
                     continue;
                 }
-                //调用fillOpRemoveMap主题填充removeMap、doneOpOffset数据结构，这里主要的目的是避免重复调用事务回查接口
+                //调用fillOpRemoveMap主题填充 removeMap、doneOpOffset 数据结构，这里主要的目的是避免重复调用事务回查接口
                 List<Long> doneOpOffset = new ArrayList<>();
                 HashMap<Long, Long> removeMap = new HashMap<>();
                 PullResult pullResult = fillOpRemoveMap(removeMap, opQueue, opOffset, halfOffset, doneOpOffset);
@@ -170,7 +170,7 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
                         log.info("Queue={} process time reach max={}", messageQueue, MAX_PROCESS_TIME_LIMIT);
                         break;
                     }
-                    //如果removeMap中包含当前处理的消息，则继续下一条
+                    //如果removeMap中包含当前处理的消息，则继续下一条  因为既然在removeMap中存在了  那证明这个半消息一定发送过commit或者rollback 不然不会到删除队列
                     if (removeMap.containsKey(i)) {
                         log.info("Half offset {} has been committed/rolled back", i);
                         removeMap.remove(i);
@@ -278,6 +278,12 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
     }
 
     /**
+     * 根据opHalfTopic的队列和halfTopic的队列填充 removeMap 和 doneOpOffset
+     * <p>
+     * doneOpOffset 已经处理完成的  不需要在进行处理的
+     * <p>
+     * removeMap 不确定的
+     * <p>
      * Read op message, parse op message, and fill removeMap
      *
      * @param removeMap      Half message to be remove, key:halfOffset, value: opOffset.

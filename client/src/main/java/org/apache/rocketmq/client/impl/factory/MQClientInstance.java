@@ -233,7 +233,11 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 生产者启动后执行的定时任务
+     */
     private void startScheduledTask() {
+        //每2分钟拉取nameServer地址
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -247,7 +251,7 @@ public class MQClientInstance {
                 }
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
-
+        //每30秒拉取路由信息
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -259,7 +263,7 @@ public class MQClientInstance {
                 }
             }
         }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
-
+        //每30秒向broker发送心跳
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -272,7 +276,7 @@ public class MQClientInstance {
                 }
             }
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
-
+        //每5每持久化消费进度
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -284,7 +288,7 @@ public class MQClientInstance {
                 }
             }
         }, 1000 * 10, this.clientConfig.getPersistConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
-
+        //调整线程池大小
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override

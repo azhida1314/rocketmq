@@ -291,6 +291,7 @@ public class ScheduleMessageService extends ConfigManager {
                             //到了需要重新投递的时间
                             if (countdown <= 0) {
                                 //取出消息  这时候的消息的topic 为 schedule_topic_xxxx  属性中的real_topic 为 %retry_topic%+消费组  属性中的 retry_topic 为 业务自己的topic
+                                //如果是延迟消息   属性中的real_topic  为业务自己的topic
                                 MessageExt msgExt =
                                     ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(
                                         offsetPy, sizePy);
@@ -335,6 +336,7 @@ public class ScheduleMessageService extends ConfigManager {
                                     }
                                 }
                             } else {
+                                //countdown 时间之后再激活
                                 ScheduleMessageService.this.timer.schedule(
                                     new DeliverDelayedMessageTimerTask(this.delayLevel, nextOffset),
                                     countdown);

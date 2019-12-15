@@ -24,6 +24,9 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 执行事物的回查逻辑
+ */
 public class TransactionalMessageCheckService extends ServiceThread {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.TRANSACTION_LOGGER_NAME);
 

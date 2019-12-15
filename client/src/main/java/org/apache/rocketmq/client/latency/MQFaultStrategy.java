@@ -89,6 +89,7 @@ public class MQFaultStrategy {
                     //  会判断 有没有  没有的话 ||有但是已经到了延迟的时间
                     if (latencyFaultTolerance.isAvailable(mq.getBrokerName())) {
                         // 返回当前队列 对应的 Broker
+                        //这里应该是 !mq.getBrokerName().equals(lastBrokerName)  因为如果是重试的话 而且进入了这个规避逻辑 说明要换一个broker  所以也不能等于上一次使用的broker
                         if (null == lastBrokerName || mq.getBrokerName().equals(lastBrokerName))
                             return mq;
                     }
@@ -120,7 +121,7 @@ public class MQFaultStrategy {
 
             return tpInfo.selectOneMessageQueue();
         }
-        //没有规避失败延迟  轮训获得
+        //没有规避失败延迟  轮询获得
         return tpInfo.selectOneMessageQueue(lastBrokerName);
     }
 

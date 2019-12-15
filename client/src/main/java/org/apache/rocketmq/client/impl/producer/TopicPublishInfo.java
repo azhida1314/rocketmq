@@ -73,6 +73,14 @@ public class TopicPublishInfo {
         this.haveTopicRouterInfo = haveTopicRouterInfo;
     }
 
+    /**
+     * 如果上次使用的broker不为null  则选出一个和上次不相同的broker
+     * 所以重试的时候  都是换了另外一个broker
+     * 但是和失败规避相比  单纯的重试可能会选出来上上次失败的  但是如果是开启了规避  上上次失败的broker还没有到可以使用的时间  一般也不会获得
+     *
+     * @param lastBrokerName
+     * @return
+     */
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
         if (lastBrokerName == null) {
             return selectOneMessageQueue();
@@ -83,6 +91,7 @@ public class TopicPublishInfo {
                 if (pos < 0)
                     pos = 0;
                 MessageQueue mq = this.messageQueueList.get(pos);
+                //正常的重试  也会选择不同的 broker
                 if (!mq.getBrokerName().equals(lastBrokerName)) {
                     return mq;
                 }

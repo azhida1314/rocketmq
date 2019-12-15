@@ -19,8 +19,12 @@ package org.apache.rocketmq.client.producer;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageExt;
 
+/**
+ * 发送事物消息需要实现的接口
+ */
 public interface TransactionListener {
     /**
+     * 当发送本地消息成功后  执行本地事物方法
      * When send transactional prepare(half) message succeed, this method will be invoked to execute local transaction.
      *
      * @param msg Half(prepare) message
