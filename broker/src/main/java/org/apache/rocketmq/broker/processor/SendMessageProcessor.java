@@ -58,9 +58,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                                           RemotingCommand request) throws RemotingCommandException {
         SendMessageContext mqtraceContext;
         switch (request.getCode()) {
+            //消费重试
             case RequestCode.CONSUMER_SEND_MSG_BACK:
                 return this.consumerSendMsgBack(ctx, request);
             default:
+                //非重试消息
                 SendMessageRequestHeader requestHeader = parseRequestHeader(request);
                 if (requestHeader == null) {
                     return null;
@@ -303,8 +305,8 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
     /**
      * 处理消息发送
-     *
-     * 普通消息  食物消息都会走
+     * <p>
+     * 普通消息  事物消息都会走
      *
      * @param ctx
      * @param request
@@ -324,10 +326,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         response.setOpaque(request.getOpaque());
 
         response.addExtField(MessageConst.PROPERTY_MSG_REGION, this.brokerController.getBrokerConfig().getRegionId());
+        //消息轨迹
         response.addExtField(MessageConst.PROPERTY_TRACE_SWITCH, String.valueOf(this.brokerController.getBrokerConfig().isTraceOn()));
 
         log.debug("receive SendMessage request command, {}", request);
-        //开始接受时间
+        //开始接受时间 可以配置延迟接受时间 当前broker延迟接受消息
         final long startTimstamp = this.brokerController.getBrokerConfig().getStartAcceptSendRequestTimeStamp();
         if (this.brokerController.getMessageStore().now() < startTimstamp) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
@@ -341,10 +344,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         if (response.getCode() != -1) {
             return response;
         }
-
+        //消息
         final byte[] body = request.getBody();
-
+        //队列 id
         int queueIdInt = requestHeader.getQueueId();
+        //topic 的配置信息
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().selectTopicConfig(requestHeader.getTopic());
         //没有可以使用的queueId 系统随机指定一个
         if (queueIdInt < 0) {
@@ -355,7 +359,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
-        //如果是消费重试的topic 达到重试的上限后  会进入死信队列
+        //如果是消费重试的topic 达到重试的上限后  会进入死信队列 消息重试次数 大于 16
         if (!handleRetryAndDLQ(requestHeader, response, request, msgInner, topicConfig)) {
             return response;
         }
@@ -374,11 +378,13 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         //重试消费的次数
         msgInner.setReconsumeTimes(requestHeader.getReconsumeTimes() == null ? 0 : requestHeader.getReconsumeTimes());
         PutMessageResult putMessageResult = null;
+        //原始消息属性
         Map<String, String> oriProps = MessageDecoder.string2messageProperties(requestHeader.getProperties());
         //消费端发送事物消息时会设置这个属性  为true
         String traFlag = oriProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
         //事物消息的 pre消息
         if (traFlag != null && Boolean.parseBoolean(traFlag)) {
+            //当前broker 是否拒绝接受事物消息
             if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {
                 response.setCode(ResponseCode.NO_PERMISSION);
                 response.setRemark(

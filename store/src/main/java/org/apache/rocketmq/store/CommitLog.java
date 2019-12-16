@@ -1384,7 +1384,7 @@ public class CommitLog {
 
             final long beginTimeMills = CommitLog.this.defaultMessageStore.now();
             // Write messages to the queue buffer
-            //完整的 mapperFile写入buffer
+            //将完整的 数据写入缓冲区
             byteBuffer.put(this.msgStoreItemMemory.array(), 0, msgLen);
             //
             AppendMessageResult result = new AppendMessageResult(AppendMessageStatus.PUT_OK, wroteOffset, msgLen, msgId,
@@ -1405,7 +1405,7 @@ public class CommitLog {
             return result;
         }
 
-        public AppendMessageResult  doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank,
+        public AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank,
                                             final MessageExtBatch messageExtBatch) {
             byteBuffer.mark();
             //physical offset

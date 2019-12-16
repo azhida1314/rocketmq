@@ -16,6 +16,20 @@
  */
 package org.apache.rocketmq.broker.topic;
 
+import org.apache.rocketmq.broker.BrokerController;
+import org.apache.rocketmq.broker.BrokerPathConfigHelper;
+import org.apache.rocketmq.common.ConfigManager;
+import org.apache.rocketmq.common.DataVersion;
+import org.apache.rocketmq.common.MixAll;
+import org.apache.rocketmq.common.TopicConfig;
+import org.apache.rocketmq.common.constant.LoggerName;
+import org.apache.rocketmq.common.constant.PermName;
+import org.apache.rocketmq.common.protocol.body.KVTable;
+import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
+import org.apache.rocketmq.common.sysflag.TopicSysFlag;
+import org.apache.rocketmq.logging.InternalLogger;
+import org.apache.rocketmq.logging.InternalLoggerFactory;
+
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
@@ -26,19 +40,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import org.apache.rocketmq.broker.BrokerController;
-import org.apache.rocketmq.broker.BrokerPathConfigHelper;
-import org.apache.rocketmq.common.ConfigManager;
-import org.apache.rocketmq.common.DataVersion;
-import org.apache.rocketmq.common.MixAll;
-import org.apache.rocketmq.common.TopicConfig;
-import org.apache.rocketmq.common.constant.LoggerName;
-import org.apache.rocketmq.common.constant.PermName;
-import org.apache.rocketmq.logging.InternalLogger;
-import org.apache.rocketmq.logging.InternalLoggerFactory;
-import org.apache.rocketmq.common.protocol.body.KVTable;
-import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
-import org.apache.rocketmq.common.sysflag.TopicSysFlag;
 
 public class TopicConfigManager extends ConfigManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
@@ -46,7 +47,7 @@ public class TopicConfigManager extends ConfigManager {
     private transient final Lock lockTopicConfigTable = new ReentrantLock();
 
     private final ConcurrentMap<String, TopicConfig> topicConfigTable =
-        new ConcurrentHashMap<String, TopicConfig>(1024);
+            new ConcurrentHashMap<String, TopicConfig>(1024);
     private final DataVersion dataVersion = new DataVersion();
     private final Set<String> systemTopicList = new HashSet<String>();
     private transient BrokerController brokerController;
@@ -72,9 +73,9 @@ public class TopicConfigManager extends ConfigManager {
                 TopicConfig topicConfig = new TopicConfig(topic);
                 this.systemTopicList.add(topic);
                 topicConfig.setReadQueueNums(this.brokerController.getBrokerConfig()
-                    .getDefaultTopicQueueNums());
+                        .getDefaultTopicQueueNums());
                 topicConfig.setWriteQueueNums(this.brokerController.getBrokerConfig()
-                    .getDefaultTopicQueueNums());
+                        .getDefaultTopicQueueNums());
                 int perm = PermName.PERM_INHERIT | PermName.PERM_READ | PermName.PERM_WRITE;
                 topicConfig.setPerm(perm);
                 this.topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
@@ -152,8 +153,19 @@ public class TopicConfigManager extends ConfigManager {
         return this.topicConfigTable.get(topic);
     }
 
+    /**
+     * 在发送消息方法中创建主题
+     *
+     * @param topic                       主题
+     * @param defaultTopic                默认topic TBW102
+     * @param remoteAddress               broker地址
+     * @param clientDefaultTopicQueueNums 对列大小
+     * @param topicSysFlag                topic系统属性
+     * @return
+     */
     public TopicConfig createTopicInSendMessageMethod(final String topic, final String defaultTopic,
-        final String remoteAddress, final int clientDefaultTopicQueueNums, final int topicSysFlag) {
+                                                      final String remoteAddress,
+                                                      final int clientDefaultTopicQueueNums, final int topicSysFlag) {
         TopicConfig topicConfig = null;
         boolean createNew = false;
 
@@ -163,7 +175,7 @@ public class TopicConfigManager extends ConfigManager {
                     topicConfig = this.topicConfigTable.get(topic);
                     if (topicConfig != null)
                         return topicConfig;
-                    //如过对应的topic不存在  且由打开了自动创建的开关  我门会根据默认topic的config来生成新的topic的config
+                    //如过对应的topic不存在  且又打开了自动创建的开关  会根据默认topic的config来生成新的topic的config
                     TopicConfig defaultTopicConfig = this.topicConfigTable.get(defaultTopic);
                     if (defaultTopicConfig != null) {
                         if (defaultTopic.equals(MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC)) {
@@ -176,8 +188,8 @@ public class TopicConfigManager extends ConfigManager {
                             topicConfig = new TopicConfig(topic);
 
                             int queueNums =
-                                clientDefaultTopicQueueNums > defaultTopicConfig.getWriteQueueNums() ? defaultTopicConfig
-                                    .getWriteQueueNums() : clientDefaultTopicQueueNums;
+                                    clientDefaultTopicQueueNums > defaultTopicConfig.getWriteQueueNums() ? defaultTopicConfig
+                                            .getWriteQueueNums() : clientDefaultTopicQueueNums;
 
                             if (queueNums < 0) {
                                 queueNums = 0;
@@ -192,16 +204,16 @@ public class TopicConfigManager extends ConfigManager {
                             topicConfig.setTopicFilterType(defaultTopicConfig.getTopicFilterType());
                         } else {
                             log.warn("Create new topic failed, because the default topic[{}] has no perm [{}] producer:[{}]",
-                                defaultTopic, defaultTopicConfig.getPerm(), remoteAddress);
+                                    defaultTopic, defaultTopicConfig.getPerm(), remoteAddress);
                         }
                     } else {
                         log.warn("Create new topic failed, because the default topic[{}] not exist. producer:[{}]",
-                            defaultTopic, remoteAddress);
+                                defaultTopic, remoteAddress);
                     }
 
                     if (topicConfig != null) {
                         log.info("Create new topic by default topic:[{}] config:[{}] producer:[{}]",
-                            defaultTopic, topicConfig, remoteAddress);
+                                defaultTopic, topicConfig, remoteAddress);
 
                         this.topicConfigTable.put(topic, topicConfig);
 
@@ -218,19 +230,19 @@ public class TopicConfigManager extends ConfigManager {
         } catch (InterruptedException e) {
             log.error("createTopicInSendMessageMethod exception", e);
         }
-
+        //如果进行了创建  把topic的路由信息注册到 nameserver  并且也会同步到 slaver 上
         if (createNew) {
-            this.brokerController.registerBrokerAll(false, true,true);
+            this.brokerController.registerBrokerAll(false, true, true);
         }
 
         return topicConfig;
     }
 
     public TopicConfig createTopicInSendMessageBackMethod(
-        final String topic,
-        final int clientDefaultTopicQueueNums,
-        final int perm,
-        final int topicSysFlag) {
+            final String topic,
+            final int clientDefaultTopicQueueNums,
+            final int perm,
+            final int topicSysFlag) {
         TopicConfig topicConfig = this.topicConfigTable.get(topic);
         if (topicConfig != null)
             return topicConfig;
@@ -264,7 +276,7 @@ public class TopicConfigManager extends ConfigManager {
         }
 
         if (createNew) {
-            this.brokerController.registerBrokerAll(false, true,true);
+            this.brokerController.registerBrokerAll(false, true, true);
         }
 
         return topicConfig;
@@ -282,14 +294,14 @@ public class TopicConfigManager extends ConfigManager {
             }
 
             log.info("update topic sys flag. oldTopicSysFlag={}, newTopicSysFlag", oldTopicSysFlag,
-                topicConfig.getTopicSysFlag());
+                    topicConfig.getTopicSysFlag());
 
             this.topicConfigTable.put(topic, topicConfig);
 
             this.dataVersion.nextVersion();
 
             this.persist();
-            this.brokerController.registerBrokerAll(false, true,true);
+            this.brokerController.registerBrokerAll(false, true, true);
         }
     }
 
@@ -302,14 +314,14 @@ public class TopicConfigManager extends ConfigManager {
             }
 
             log.info("update topic sys flag. oldTopicSysFlag={}, newTopicSysFlag", oldTopicSysFlag,
-                topicConfig.getTopicSysFlag());
+                    topicConfig.getTopicSysFlag());
 
             this.topicConfigTable.put(topic, topicConfig);
 
             this.dataVersion.nextVersion();
 
             this.persist();
-            this.brokerController.registerBrokerAll(false, true,true);
+            this.brokerController.registerBrokerAll(false, true, true);
         }
     }
 
@@ -394,14 +406,14 @@ public class TopicConfigManager extends ConfigManager {
     @Override
     public String configFilePath() {
         return BrokerPathConfigHelper.getTopicConfigPath(this.brokerController.getMessageStoreConfig()
-            .getStorePathRootDir());
+                .getStorePathRootDir());
     }
 
     @Override
     public void decode(String jsonString) {
         if (jsonString != null) {
             TopicConfigSerializeWrapper topicConfigSerializeWrapper =
-                TopicConfigSerializeWrapper.fromJson(jsonString, TopicConfigSerializeWrapper.class);
+                    TopicConfigSerializeWrapper.fromJson(jsonString, TopicConfigSerializeWrapper.class);
             if (topicConfigSerializeWrapper != null) {
                 this.topicConfigTable.putAll(topicConfigSerializeWrapper.getTopicConfigTable());
                 this.dataVersion.assignNewOne(topicConfigSerializeWrapper.getDataVersion());
