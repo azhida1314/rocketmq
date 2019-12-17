@@ -365,6 +365,7 @@ public class MappedFile extends ReferenceResource {
     /**
      * FileChannel 或 MappedByteBuffer 的force 方法
      * 把pageCache中的数据刷到磁盘
+     *
      * @return The current flushed position
      */
     public int flush(final int flushLeastPages) {
@@ -374,15 +375,18 @@ public class MappedFile extends ReferenceResource {
 
                 try {
                     //We only append data to fileChannel or mappedByteBuffer, never both.
+                    //mmap方式
                     if (writeBuffer != null || this.fileChannel.position() != 0) {
+                        //刷盘
                         this.fileChannel.force(false);
                     } else {
+                        //缓存池方式
                         this.mappedByteBuffer.force();
                     }
                 } catch (Throwable e) {
                     log.error("Error occurred when force data to disk.", e);
                 }
-
+                //更新刷盘位置
                 this.flushedPosition.set(value);
                 this.release();
             } else {
@@ -390,6 +394,7 @@ public class MappedFile extends ReferenceResource {
                 this.flushedPosition.set(getReadPosition());
             }
         }
+        //返回在当前的内存映射文件的相对位置
         return this.getFlushedPosition();
     }
 
@@ -437,18 +442,27 @@ public class MappedFile extends ReferenceResource {
         }
     }
 
+    /**
+     * 是否可刷盘
+     *
+     * @param flushLeastPages 代表是否累加到相应的页数才刷盘  同步刷盘传0 不等待直接刷
+     * @return
+     */
     private boolean isAbleToFlush(final int flushLeastPages) {
+        //刷到磁盘的位置
         int flush = this.flushedPosition.get();
+        //写的位置
         int write = getReadPosition();
-
+        //是否写满了
         if (this.isFull()) {
             return true;
         }
 
         if (flushLeastPages > 0) {
+            // 算出来 现在满足多少页
             return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= flushLeastPages;
         }
-
+        // 0 强制数盘
         return write > flush;
     }
 
@@ -588,11 +602,12 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * 对当前映射文件进行预热
-     *
+     * <p>
      * 具体的先对当前映射文件的的每个内存页写入一个字节0 当刷盘策略为 同步刷盘时 执行强制刷盘 并且是每次修改 pages 个分页进行一次刷盘
      * 然后将此映射文件全部的地址空间锁定在物理存储中 防止其被交换到swap中
+     * <p>
+     * 在调用 madvice  传入 WWILL_NEED 策略 将刚刚锁住的内存预热 其实就是告诉内核 我马上就要用这快内存先做虚拟内存到物理内存的映射
      *
-     * 在调用 madvice  传入 WWILL_NEED 策略 将刚刚锁住的内存预热 起始就是告诉内核 我马上就要用这快内存先做虚拟内存到物理内存的映射
      * @param type  刷盘策略
      * @param pages 预热时一次刷盘的页数
      */
@@ -607,6 +622,7 @@ public class MappedFile extends ReferenceResource {
             if (type == FlushDiskType.SYNC_FLUSH) {
                 if ((i / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE) >= pages) {
                     flush = i;
+                    //同步刷
                     mappedByteBuffer.force();
                 }
             }
@@ -616,6 +632,7 @@ public class MappedFile extends ReferenceResource {
                 log.info("j={}, costTime={}", j, System.currentTimeMillis() - time);
                 time = System.currentTimeMillis();
                 try {
+                    //todo ？让出cpu资源给其他线程机会
                     Thread.sleep(0);
                 } catch (InterruptedException e) {
                     log.error("Interrupted", e);

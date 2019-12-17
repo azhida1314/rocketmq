@@ -45,7 +45,7 @@ public class MappedFileQueue {
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
     /**
-     * 预分配映射文件的服务线程 rocketMq使用内存映射处理  CommitLog  ConsumeQueue 文件
+     * 预分配映射文件的服务线程 rocketMq 使用内存映射处理  CommitLog  ConsumeQueue 文件
      */
     private final AllocateMappedFileService allocateMappedFileService;
     /**
@@ -178,6 +178,7 @@ public class MappedFileQueue {
     public boolean load() {
         //CommitLog 文件的存储路径
         File dir = new File(this.storePath);
+        //所有文件
         File[] files = dir.listFiles();
         if (files != null) {
             // ascending order
@@ -193,7 +194,7 @@ public class MappedFileQueue {
                 try {
                     //构建  mappedFile
                     MappedFile mappedFile = new MappedFile(file.getPath(), mappedFileSize);
-
+                    //
                     mappedFile.setWrotePosition(this.mappedFileSize);
                     mappedFile.setFlushedPosition(this.mappedFileSize);
                     mappedFile.setCommittedPosition(this.mappedFileSize);
@@ -228,7 +229,7 @@ public class MappedFileQueue {
      * 获取最新的 内存映射文件
      *
      * @param startOffset 起始位置
-     * @param needCreate  为true 没有文件的化 则创建
+     * @param needCreate  为true 没有文件的 则创建
      * @return
      */
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
@@ -265,6 +266,7 @@ public class MappedFileQueue {
                 mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
                         nextNextFilePath, this.mappedFileSize);
             } else {
+                //todo 不知道什么时候为null
                 try {
                     //创建一个
                     mappedFile = new MappedFile(nextFilePath, this.mappedFileSize);
@@ -304,6 +306,7 @@ public class MappedFileQueue {
 
         while (!this.mappedFiles.isEmpty()) {
             try {
+                //获取最后一个
                 mappedFileLast = this.mappedFiles.get(this.mappedFiles.size() - 1);
                 break;
             } catch (IndexOutOfBoundsException e) {
@@ -497,14 +500,18 @@ public class MappedFileQueue {
         //根据上次刷新的位置，得到当前的 MappedFile 对象
         MappedFile mappedFile = this.findMappedFileByOffset(this.flushedWhere, this.flushedWhere == 0);
         if (mappedFile != null) {
+            //上次刷盘的时间
             long tmpTimeStamp = mappedFile.getStoreTimestamp();
             //执行 MappedFile 的 flush 方法
             int offset = mappedFile.flush(flushLeastPages);
+            //物理偏移位置 = 文件的起始偏移量+这次数盘的位置（相对位置）
             long where = mappedFile.getFileFromOffset() + offset;
+            //比较要刷盘的位置 和本次刷完之后的绝对位置
             result = where == this.flushedWhere;
             //更新上次刷新的位置
             this.flushedWhere = where;
             if (0 == flushLeastPages) {
+                //赋值当前时间
                 this.storeTimestamp = tmpTimeStamp;
             }
         }
