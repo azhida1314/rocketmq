@@ -114,7 +114,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
             this.executeConsumeMessageHookAfter(context);
         }
-
+        //订阅关系  消费端向broker注册订阅关系  用的时候从broker获取 不用每次发送请求时带过来
         SubscriptionGroupConfig subscriptionGroupConfig =
                 this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(requestHeader.getGroup());
         if (null == subscriptionGroupConfig) {
@@ -135,20 +135,21 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             response.setRemark(null);
             return response;
         }
-
+        //生成 %RETRY%+consumerGroup 样式的topic
         String newTopic = MixAll.getRetryTopic(requestHeader.getGroup());
+        //获得queueId 重试队列只有一个
         int queueIdInt = Math.abs(this.random.nextInt() % 99999999) % subscriptionGroupConfig.getRetryQueueNums();
 
         int topicSysFlag = 0;
         if (requestHeader.isUnitMode()) {
             topicSysFlag = TopicSysFlag.buildSysFlag(false, true);
         }
-
+        // 获取topic配置信息
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(
                 newTopic,
                 subscriptionGroupConfig.getRetryQueueNums(),
                 PermName.PERM_WRITE | PermName.PERM_READ, topicSysFlag);
-        if (null == topicConfig) {
+        if (null == topicConfig) {//
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark("topic[" + newTopic + "] not exist");
             return response;
@@ -169,13 +170,13 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         //RETRY_TOPIC 在属性中存不存在
         final String retryTopic = msgExt.getProperty(MessageConst.PROPERTY_RETRY_TOPIC);
         if (null == retryTopic) {
-            //第一次不存在  把真实的topic 赋值给 key=RETRY_TOPIC 的属性值
+            //第一次不存在  把真实的topic 赋值给 key= RETRY_TOPIC 的属性值
             MessageAccessor.putProperty(msgExt, MessageConst.PROPERTY_RETRY_TOPIC, msgExt.getTopic());
         }
         msgExt.setWaitStoreMsgOK(false);
-
+        //延迟级别
         int delayLevel = requestHeader.getDelayLevel();
-
+        //最大重试次数
         int maxReconsumeTimes = subscriptionGroupConfig.getRetryMaxTimes();
         if (request.getVersion() >= MQVersion.Version.V3_4_9.ordinal()) {
             maxReconsumeTimes = requestHeader.getMaxReconsumeTimes();
@@ -201,7 +202,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 //延迟级别 delayLevel =3
                 delayLevel = 3 + msgExt.getReconsumeTimes();
             }
-
+            //设置延迟级别
             msgExt.setDelayTimeLevel(delayLevel);
         }
         //构建要投递到定时队列的消息
@@ -215,27 +216,28 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgExt.getProperties()));
         //tag的hashcode
         msgInner.setTagsCode(MessageExtBrokerInner.tagsString2tagsCode(null, msgExt.getTags()));
-
+        //queueId
         msgInner.setQueueId(queueIdInt);
         msgInner.setSysFlag(msgExt.getSysFlag());
         msgInner.setBornTimestamp(msgExt.getBornTimestamp());
         msgInner.setBornHost(msgExt.getBornHost());
         msgInner.setStoreHost(this.getStoreHost());
+        //重试次数+1
         msgInner.setReconsumeTimes(msgExt.getReconsumeTimes() + 1);
 
         String originMsgId = MessageAccessor.getOriginMessageId(msgExt);
         MessageAccessor.setOriginMessageId(msgInner, UtilAll.isBlank(originMsgId) ? msgExt.getMsgId() : originMsgId);
-        //消息存储
+        //消息存储  会把topic替换成  schedule_topic_xxxx
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         if (putMessageResult != null) {
             switch (putMessageResult.getPutMessageStatus()) {
                 case PUT_OK:
-                    //真实的业务topic
+                    // 业务真实 topic
                     String backTopic = msgExt.getTopic();
                     //消息属性中业务的topic
                     String correctTopic = msgExt.getProperty(MessageConst.PROPERTY_RETRY_TOPIC);
                     if (correctTopic != null) {
-                        //不知道啥意思  这俩应该是一样
+                        //是要上报数据 如果属性中存在 属性中的topic一定是真实的业务topic  按说这两个是同一个 没看出来有哪个地方改了
                         backTopic = correctTopic;
                     }
                     //状态服务 上报当前的topic重试的次数

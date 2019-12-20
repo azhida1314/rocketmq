@@ -29,7 +29,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class MappedFileQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
-
+    //每次删除文件的最大值
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
     private final String storePath;
@@ -408,23 +408,28 @@ public class MappedFileQueue {
             return 0;
 
         int mfsLength = mfs.length - 1;
+        //已删除文件的个数
         int deleteCount = 0;
         List<MappedFile> files = new ArrayList<MappedFile>();
         if (null != mfs) {
             for (int i = 0; i < mfsLength; i++) {
                 MappedFile mappedFile = (MappedFile) mfs[i];
+                // 可以存活到的时间 = 过期时间+上次修改时间
                 long liveMaxTimestamp = mappedFile.getLastModifiedTimestamp() + expiredTime;
+                //如果是到了存活时间  或者是强制删除
                 if (System.currentTimeMillis() >= liveMaxTimestamp || cleanImmediately) {
+                    //进行文件的删除
                     if (mappedFile.destroy(intervalForcibly)) {
                         files.add(mappedFile);
                         deleteCount++;
-
+                        //到达每次删除文件的最大值
                         if (files.size() >= DELETE_FILES_BATCH_MAX) {
                             break;
                         }
-
+                        //如果配置了两个文件删除的间隔
                         if (deleteFilesInterval > 0 && (i + 1) < mfsLength) {
                             try {
+                                //休眠一个间隔的时间
                                 Thread.sleep(deleteFilesInterval);
                             } catch (InterruptedException e) {
                             }
@@ -438,7 +443,7 @@ public class MappedFileQueue {
                 }
             }
         }
-
+        //从mappedFileQueue中维护的mappedFiles列表中删除
         deleteExpiredFile(files);
 
         return deleteCount;
@@ -622,9 +627,15 @@ public class MappedFileQueue {
         return size;
     }
 
+    /**
+     *
+     * @param intervalForcibly 强制销毁映射文件的间隔
+     * @return
+     */
     public boolean retryDeleteFirstFile(final long intervalForcibly) {
         MappedFile mappedFile = this.getFirstMappedFile();
         if (mappedFile != null) {
+            //不能被使用
             if (!mappedFile.isAvailable()) {
                 log.warn("the mappedFile was destroyed once, but still alive, " + mappedFile.getFileName());
                 boolean result = mappedFile.destroy(intervalForcibly);

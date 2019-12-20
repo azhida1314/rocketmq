@@ -554,15 +554,24 @@ public class MappedFile extends ReferenceResource {
         return true;
     }
 
+    /**
+     * 删除物理文件
+     *
+     * @param intervalForcibly 强制删除的间隔
+     * @return
+     */
     public boolean destroy(final long intervalForcibly) {
+        //减少要删除文件的引用
         this.shutdown(intervalForcibly);
-
+        //没有在被使用的
         if (this.isCleanupOver()) {
             try {
+                //关闭当前的fileChannel
                 this.fileChannel.close();
                 log.info("close file channel " + this.fileName + " OK");
 
                 long beginTime = System.currentTimeMillis();
+                //删除文件
                 boolean result = this.file.delete();
                 log.info("delete file[REF:" + this.getRefCount() + "] " + this.fileName
                         + (result ? " OK, " : " Failed, ") + "W:" + this.getWrotePosition() + " M:"

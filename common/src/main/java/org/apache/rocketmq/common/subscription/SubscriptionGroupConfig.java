@@ -27,11 +27,11 @@ public class SubscriptionGroupConfig {
     private boolean consumeFromMinEnable = true;
 
     private boolean consumeBroadcastEnable = true;
-
+    //重试队列个数
     private int retryQueueNums = 1;
-
+    //最大重试次数
     private int retryMaxTimes = 16;
-
+    //
     private long brokerId = MixAll.MASTER_ID;
 
     private long whichBrokerWhenConsumeSlowly = 1;

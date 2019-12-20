@@ -46,8 +46,10 @@ public abstract class ReferenceResource {
             this.firstShutdownTimestamp = System.currentTimeMillis();
             this.release();
         } else if (this.getRefCount() > 0) {
+            //如果当前时间-上次要删除的时间  >最大的可等待的删除时间间隔
             if ((System.currentTimeMillis() - this.firstShutdownTimestamp) >= intervalForcibly) {
                 this.refCount.set(-1000 - this.getRefCount());
+                //清空  达到可以被删除
                 this.release();
             }
         }

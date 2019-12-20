@@ -124,6 +124,14 @@ public class CommitLog {
         return this.mappedFileQueue.remainHowManyDataToFlush();
     }
 
+    /**
+     * 删除过期时间
+     * @param expiredTime 过期时间
+     * @param deleteFilesInterval 删除文件的间隔
+     * @param intervalForcibly 强制删除文件的间隔
+     * @param cleanImmediately 是否立即删除文件
+     * @return
+     */
     public int deleteExpiredFile(
             final long expiredTime,
             final int deleteFilesInterval,
@@ -896,6 +904,7 @@ public class CommitLog {
         }
     }
 
+    //重试删除第一个文件
     public boolean retryDeleteFirstFile(final long intervalForcibly) {
         return this.mappedFileQueue.retryDeleteFirstFile(intervalForcibly);
     }
@@ -954,7 +963,7 @@ public class CommitLog {
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitIntervalCommitLog();
 
                 int commitDataLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogLeastPages();
-
+                //没有达到 最小页的要求但是到时了 也要进行提交
                 int commitDataThoroughInterval =
                         CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogThoroughInterval();
 

@@ -18,10 +18,19 @@ package org.apache.rocketmq.client.impl.consumer;
 
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/**
+ * 拉取消息的请求
+ */
 public class PullRequest {
+    //消费组
     private String consumerGroup;
+    //一个topic下的一个queue 对应一个 PullRequest
+    //一个pullRequest只消费一个队列
     private MessageQueue messageQueue;
+    //接受从broker拉取下来的消息
     private ProcessQueue processQueue;
+    //下次要消费的位点  consumeQueue的逻辑偏移
+    //consumeQueue 是定长的数据结构 数组根据下标检索 o1
     private long nextOffset;
     private boolean lockedFirst = false;
 

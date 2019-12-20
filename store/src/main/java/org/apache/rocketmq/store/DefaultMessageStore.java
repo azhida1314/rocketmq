@@ -195,6 +195,9 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
+     * 文件恢复
+     * commitLog consumeQueue index
+     *
      * @throws IOException
      */
     public boolean load() {
@@ -1215,6 +1218,9 @@ public class DefaultMessageStore implements MessageStore {
         log.info(fileName + (result ? " create OK" : " already exists"));
     }
 
+    /**
+     * 启动后添加的定时任务
+     */
     private void addScheduleTask() {
 
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
@@ -1261,7 +1267,9 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private void cleanFilesPeriodically() {
+        //清除commitLog
         this.cleanCommitLogService.run();
+        //清除  consumeQueue 和 index 文件
         this.cleanConsumeQueueService.run();
     }
 
@@ -1490,6 +1498,9 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 清除提交日志服务
+     */
     class CleanCommitLogService {
 
         private final static int MAX_MANUAL_DELETE_FILE_TIMES = 20;
@@ -1504,6 +1515,7 @@ public class DefaultMessageStore implements MessageStore {
 
         private volatile boolean cleanImmediately = false;
 
+        //手动执行的口 最多删除20次  没有暴漏
         public void excuteDeleteFilesManualy() {
             this.manualDeleteFileSeveralTimes = MAX_MANUAL_DELETE_FILE_TIMES;
             DefaultMessageStore.log.info("executeDeleteFilesManually was invoked");
@@ -1511,29 +1523,38 @@ public class DefaultMessageStore implements MessageStore {
 
         public void run() {
             try {
+                //删除过期文件
                 this.deleteExpiredFiles();
-
+                //删除挂起的文件 里面是删除的第一个文件 不太理解什么时候要删除第一个文件？
                 this.redeleteHangedFile();
             } catch (Throwable e) {
                 DefaultMessageStore.log.warn(this.getServiceName() + " service has exception. ", e);
             }
         }
 
+        /**
+         * 删除过期文件
+         */
         private void deleteExpiredFiles() {
             int deleteCount = 0;
+            //文件的保留时间 默认72 小时
             long fileReservedTime = DefaultMessageStore.this.getMessageStoreConfig().getFileReservedTime();
+            //删除文件的间隔时间
             int deletePhysicFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteCommitLogFilesInterval();
+            //强制销毁映射文件的间隔
             int destroyMapedFileIntervalForcibly = DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
-
+            //到没到删除的时间 默认是凌晨4点
             boolean timeup = this.isTimeToDelete();
+            //是否是磁盘空间不足
             boolean spacefull = this.isSpaceToDelete();
+            //是否手动删除
             boolean manualDelete = this.manualDeleteFileSeveralTimes > 0;
-
+            //到时间了  或者磁盘满了 或者是手动删除
             if (timeup || spacefull || manualDelete) {
-
+                //手动删除 减少可删除次数
                 if (manualDelete)
                     this.manualDeleteFileSeveralTimes--;
-
+                // 启用强制删除文件 并且立即删除文件
                 boolean cleanAtOnce = DefaultMessageStore.this.getMessageStoreConfig().isCleanFileForciblyEnable() && this.cleanImmediately;
 
                 log.info("begin to delete before {} hours file. timeup: {} spacefull: {} manualDeleteFileSeveralTimes: {} cleanAtOnce: {}",
@@ -1542,7 +1563,7 @@ public class DefaultMessageStore implements MessageStore {
                         spacefull,
                         manualDeleteFileSeveralTimes,
                         cleanAtOnce);
-
+                //把保存时间换成毫秒
                 fileReservedTime *= 60 * 60 * 1000;
 
                 deleteCount = DefaultMessageStore.this.commitLog.deleteExpiredFile(fileReservedTime, deletePhysicFilesInterval,
@@ -1554,11 +1575,16 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        //删除挂起文件的间隔
         private void redeleteHangedFile() {
+            //重新删除挂起的文件间隔
             int interval = DefaultMessageStore.this.getMessageStoreConfig().getRedeleteHangedFileInterval();
+            //当前时间戳
             long currentTimestamp = System.currentTimeMillis();
+            //两次的时间间隔大于 两分钟
             if ((currentTimestamp - this.lastRedeleteTimestamp) > interval) {
                 this.lastRedeleteTimestamp = currentTimestamp;
+                //强制销毁映射文件的间隔
                 int destroyMapedFileIntervalForcibly =
                         DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
                 if (DefaultMessageStore.this.commitLog.retryDeleteFirstFile(destroyMapedFileIntervalForcibly)) {
@@ -1570,6 +1596,7 @@ public class DefaultMessageStore implements MessageStore {
             return CleanCommitLogService.class.getSimpleName();
         }
 
+        //配置的删除过期文件的时间  默认凌晨4点
         private boolean isTimeToDelete() {
             String when = DefaultMessageStore.this.getMessageStoreConfig().getDeleteWhen();
             if (UtilAll.isItTimeToDo(when)) {
@@ -1659,6 +1686,7 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        //清除  consumeQueue 和 index 文件
         private void deleteExpiredFiles() {
             int deleteLogicsFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteConsumeQueueFilesInterval();
 
@@ -1680,7 +1708,6 @@ public class DefaultMessageStore implements MessageStore {
                         }
                     }
                 }
-
                 DefaultMessageStore.this.indexService.deleteExpiredFile(minOffset);
             }
         }
@@ -1813,7 +1840,8 @@ public class DefaultMessageStore implements MessageStore {
 
                         for (int readSize = 0; readSize < result.getSize() && doNext; ) {
                             DispatchRequest dispatchRequest =
-                                    //读取message 返回Dispatch 对象
+                                    //读取message 返回Dispatch 对象  如果是消费重试消息  则替换 tagsCode 为延迟到期的时间戳
+                                    //当时间到期后  重新投递message的时候 又把 tagsCode 替换回来
                                     DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);
                             int size = dispatchRequest.getMsgSize();
 

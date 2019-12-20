@@ -492,12 +492,21 @@ public class ConsumeQueue {
         }
     }
 
+    /**
+     * 通过偏移量找到消息索引
+     * @param startIndex
+     * @return
+     */
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;
+        //消息的物理位置  因为是定长的结构  用逻辑偏移 * 20字节  就是物理位置
         long offset = startIndex * CQ_STORE_UNIT_SIZE;
+        //大于0
         if (offset >= this.getMinLogicOffset()) {
+            // 通过偏移量查找映射文件
             MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset);
             if (mappedFile != null) {
+                //根据 offset % mappedFileSize 定位在当前文件的位置
                 SelectMappedBufferResult result = mappedFile.selectMappedBuffer((int) (offset % mappedFileSize));
                 return result;
             }

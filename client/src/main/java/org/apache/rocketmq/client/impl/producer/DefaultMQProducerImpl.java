@@ -461,19 +461,23 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     public void send(final Message msg, final SendCallback sendCallback, final long timeout)
             throws MQClientException, RemotingException, InterruptedException {
         final long beginStartTime = System.currentTimeMillis();
+        //异步发送请求  是提交到了线程池中
         ExecutorService executor = this.getAsyncSenderExecutor();
         try {
             executor.submit(new Runnable() {
                 @Override
                 public void run() {
+                    //提交到线程池花费的时间
                     long costTime = System.currentTimeMillis() - beginStartTime;
                     if (timeout > costTime) {
                         try {
-                            sendDefaultImpl(msg, CommunicationMode.ASYNC, sendCallback, timeout - costTime);
+                            sendDefaultImpl(msg, CommunicationMode.ASYNC, sendCallback, timeout - costTime/** 剩余的时间*/);
                         } catch (Exception e) {
+                            //异步发送出现异常
                             sendCallback.onException(e);
                         }
                     } else {
+                        //超时
                         sendCallback.onException(
                                 new RemotingTooMuchRequestException("DEFAULT ASYNC send call timeout"));
                     }
@@ -731,8 +735,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
         SendMessageContext context = null;
         if (brokerAddr != null) {
-            //VIPChannel 如果启用 则是当前的端口号减2   broker启动时会启动两个端口  10979 10811
-            //个人理解  VIPChannel 相对于别的公共 channel 应该处理更快
+            //VIPChannel 如果启用 则是当前的端口号减2   broker启动时会启动两个端口  10989 10911
+            //个人理解  VIPChannel 相对于别的公共 channel 应该处理更快 使发送消息的端口和别的端口分开
             brokerAddr = MixAll.brokerVIPChannel(this.defaultMQProducer.isSendMessageWithVIPChannel(), brokerAddr);
             //获得消息体
             byte[] prevBody = msg.getBody();
@@ -846,10 +850,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                                 requestHeader,
                                 timeout - costTimeAsync,
                                 communicationMode,
-                                sendCallback,
+                                sendCallback,//异步发送结果回调函数
                                 topicPublishInfo,
                                 this.mQClientFactory,
-                                this.defaultMQProducer.getRetryTimesWhenSendAsyncFailed(),
+                                this.defaultMQProducer.getRetryTimesWhenSendAsyncFailed(),//异步发送重试次数
                                 context,
                                 this);
                         break;
@@ -912,6 +916,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     /**
      * 试着去压缩消息
+     *
      * @param msg
      * @return
      */

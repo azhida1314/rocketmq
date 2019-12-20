@@ -189,10 +189,10 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
     @Override
     public void submitConsumeRequest(
-            final List<MessageExt> msgs,
-            final ProcessQueue processQueue,
-            final MessageQueue messageQueue,
-            final boolean dispatchToConsume) {
+            final List<MessageExt> msgs,//消息
+            final ProcessQueue processQueue,//消息存储位置
+            final MessageQueue messageQueue,//当前消费的队列
+            final boolean dispatchToConsume) {//消费的次数
         //每个消费请求  一批次的大小  默认为1
         //去broker拉取消息  一次会拉取32条
         final int consumeBatchSize = this.defaultMQPushConsumer.getConsumeMessageBatchMaxSize();
@@ -204,12 +204,13 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 // 提交到线程组后  异步执行run方法
                 this.consumeExecutor.submit(consumeRequest);
             } catch (RejectedExecutionException e) {
-                //有异常 一会再消费
+                //满了 过5秒再提交消费
                 this.submitConsumeRequestLater(consumeRequest);
             }
         } else {
             //封装批次
             for (int total = 0; total < msgs.size(); ) {
+                //批次大小
                 List<MessageExt> msgThis = new ArrayList<MessageExt>(consumeBatchSize);
                 for (int i = 0; i < consumeBatchSize; i++, total++) {
                     if (total < msgs.size()) {
@@ -218,9 +219,10 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                         break;
                     }
                 }
-
+                //多条消息
                 ConsumeRequest consumeRequest = new ConsumeRequest(msgThis, processQueue, messageQueue);
                 try {
+                    //提交
                     this.consumeExecutor.submit(consumeRequest);
                 } catch (RejectedExecutionException e) {
                     for (; total < msgs.size(); total++) {
@@ -233,6 +235,11 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         }
     }
 
+    /**
+     * 重新替换 retry topic为业务的topic
+     *
+     * @param msgs 消费的消息
+     */
     public void resetRetryTopic(final List<MessageExt> msgs) {
         final String groupTopic = MixAll.getRetryTopic(consumerGroup);
         for (MessageExt msg : msgs) {
@@ -253,11 +260,18 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         }
     }
 
+    /**
+     * 处理消费的结果
+     *
+     * @param status
+     * @param context
+     * @param consumeRequest
+     */
     public void processConsumeResult(
-            final ConsumeConcurrentlyStatus status,
-            final ConsumeConcurrentlyContext context,
-            final ConsumeRequest consumeRequest
-    ) {
+            final ConsumeConcurrentlyStatus status, //并发消费的状态
+            final ConsumeConcurrentlyContext context,//并发消费上下文
+            final ConsumeRequest consumeRequest//消费请求
+    ) { //ack
         int ackIndex = context.getAckIndex();
 
         if (consumeRequest.getMsgs().isEmpty())
@@ -265,11 +279,16 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         //判断消费状态
         switch (status) {
             case CONSUME_SUCCESS:
+                //Integer.MAX_VALUE  >1
                 if (ackIndex >= consumeRequest.getMsgs().size()) {
+                    // ackIndex =0
                     ackIndex = consumeRequest.getMsgs().size() - 1;
                 }
+                //ok =1
                 int ok = ackIndex + 1;
+                // failed =0
                 int failed = consumeRequest.getMsgs().size() - ok;
+                //上报状态服务
                 this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), ok);
                 this.getConsumerStatsManager().incConsumeFailedTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), failed);
                 break;
@@ -294,31 +313,36 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             case CLUSTERING:
                 List<MessageExt> msgBackFailed = new ArrayList<MessageExt>(consumeRequest.getMsgs().size());
                 // consumeRequest.getMsgs().size() 默认为1
-                //i = -1+1 < 1
+                //默认情况 批次为1 成功为 0  稍后重试为 -1
+                //成功 这个循环不会进入 1= 1+1   i=2  不小于1
+                //重试 i = -1+1      i<1
                 for (int i = ackIndex + 1; i < consumeRequest.getMsgs().size(); i++) {
+                    //取出消息
                     MessageExt msg = consumeRequest.getMsgs().get(i);
                     //重新投递消息
                     boolean result = this.sendMessageBack(msg, context);
                     if (!result) {
+                        //没有投递成功  设置重试次数 = 原来的重试次数 +1
                         msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
+                        //增加到缓存中
                         msgBackFailed.add(msg);
                     }
                 }
 
                 if (!msgBackFailed.isEmpty()) {
                     consumeRequest.getMsgs().removeAll(msgBackFailed);
-                    //
+                    //稍后直接重试 此处为发送失败的
                     this.submitConsumeRequestLater(msgBackFailed, consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue());
                 }
                 break;
             default:
                 break;
         }
-
+        // 下次要消费的逻辑队列的偏移量  代表这个之前的都已经被消费
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());
         //不管消费成功还是失败  都会更新消费的进度
         if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
-
+            //更新消费进度
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), offset, true);
         }
     }
@@ -328,11 +352,11 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
     }
 
     public boolean sendMessageBack(final MessageExt msg, final ConsumeConcurrentlyContext context) {
+        //默认为 0
         int delayLevel = context.getDelayLevelWhenNextConsume();
 
         try {
-            //向消费失败的broker重新投递
-            // 可以在commitLog拉取到数据
+            //向消费失败的broker重新投递  可以在commitLog拉取到数据
             this.defaultMQPushConsumerImpl.sendMessageBack(msg, delayLevel, context.getMessageQueue().getBrokerName());
             return true;
         } catch (Exception e) {
@@ -370,8 +394,11 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
     }
 
     class ConsumeRequest implements Runnable {
+        //消费的消息
         private final List<MessageExt> msgs;
+        //消息存储的地方
         private final ProcessQueue processQueue;
+        //消费的队列
         private final MessageQueue messageQueue;
 
         public ConsumeRequest(List<MessageExt> msgs, ProcessQueue processQueue, MessageQueue messageQueue) {
@@ -422,6 +449,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                         MessageAccessor.setConsumeStartTimeStamp(msg, String.valueOf(System.currentTimeMillis()));
                     }
                 }
+                //执行自己的监听器中写的业务方法
                 status = listener.consumeMessage(Collections.unmodifiableList(msgs), context);
             } catch (Throwable e) {
                 log.warn("consumeMessage exception: {} Group: {} Msgs: {} MQ: {}",
