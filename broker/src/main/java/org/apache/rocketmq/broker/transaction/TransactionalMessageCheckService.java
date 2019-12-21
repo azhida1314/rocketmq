@@ -25,7 +25,7 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 执行事物的回查逻辑
+ * 执行事物消息的回查逻辑
  */
 public class TransactionalMessageCheckService extends ServiceThread {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.TRANSACTION_LOGGER_NAME);
@@ -38,6 +38,9 @@ public class TransactionalMessageCheckService extends ServiceThread {
         this.brokerController = brokerController;
     }
 
+    /**
+     * 启动线程
+     */
     @Override
     public void start() {
         if (started.compareAndSet(false, true)) {
@@ -60,21 +63,31 @@ public class TransactionalMessageCheckService extends ServiceThread {
         return TransactionalMessageCheckService.class.getSimpleName();
     }
 
+    /**
+     * 线程执行的方法
+     */
     @Override
     public void run() {
         log.info("Start transaction check service thread!");
+        //事务执行回查任务的间隔 默认60秒
         long checkInterval = brokerController.getBrokerConfig().getTransactionCheckInterval();
         while (!this.isStopped()) {
+            //执行
             this.waitForRunning(checkInterval);
         }
         log.info("End transaction check service thread!");
     }
 
+    /**
+     * 时间到了执行  执行回查逻辑
+     */
     @Override
     protected void onWaitEnd() {
         // 事物的过期时间 一个消息的存储时间 + 该值 大于系统当前时间，才对该消息执行事务状态会查。
+
+        //事务消息可以回查的间隔
         long timeout = brokerController.getBrokerConfig().getTransactionTimeOut();
-        //事物回查最大次数 如果超过检测次数，消息会默认为丢弃，即rollback消息。
+        //事物回查最大次数  如果超过检测次数，消息会默认为丢弃，即rollback消息。
         int checkMax = brokerController.getBrokerConfig().getTransactionCheckMax();
         long begin = System.currentTimeMillis();
         log.info("Begin to check prepare message, begin time:{}", begin);

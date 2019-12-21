@@ -16,14 +16,15 @@
  */
 package org.apache.rocketmq.common;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import org.apache.rocketmq.common.annotation.ImportantField;
 import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.common.constant.PermName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class BrokerConfig {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
@@ -158,12 +159,14 @@ public class BrokerConfig {
     /**
      * The minimum time of the transactional message  to be checked firstly, one message only exceed this time interval
      * that can be checked.
+     * 事务消息需要超过这个间隔才可以进行回查
      */
     @ImportantField
     private long transactionTimeOut = 6 * 1000;
 
     /**
      * The maximum number of times the message was checked, if exceed this value, this message will be discarded.
+     * 检查的最大次数，如果超过此值，该事务消息将被丢弃。
      */
     @ImportantField
     private int transactionCheckMax = 15;
@@ -749,7 +752,7 @@ public class BrokerConfig {
     public void setMsgTraceTopicName(String msgTraceTopicName) {
         this.msgTraceTopicName = msgTraceTopicName;
     }
-    
+
     public boolean isTraceTopicEnable() {
         return traceTopicEnable;
     }

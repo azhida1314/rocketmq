@@ -698,11 +698,17 @@ public class DefaultMessageStore implements MessageStore {
         return 0;
     }
 
+    /**
+     *
+     * @param commitLogOffset physical offset.
+     * @return
+     */
     public MessageExt lookMessageByOffset(long commitLogOffset) {
+        // TODO halfTopic 生成的 consumerQueue 是定长的  只有4个字节  代表bodySize
         SelectMappedBufferResult sbr = this.commitLog.getMessage(commitLogOffset, 4);
         if (null != sbr) {
             try {
-                // 1 TOTALSIZE
+                // 1 TOTALSIZE  真正的消息的大小
                 int size = sbr.getByteBuffer().getInt();
                 return lookMessageByOffset(commitLogOffset, size);
             } finally {

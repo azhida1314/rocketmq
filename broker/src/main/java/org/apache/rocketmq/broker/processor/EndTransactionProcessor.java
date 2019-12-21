@@ -39,7 +39,7 @@ import org.apache.rocketmq.store.PutMessageResult;
 import org.apache.rocketmq.store.config.BrokerRole;
 
 /**
- * 处理事物消息题哦叫和回滚的请求
+ * 处理事物消息提交或回滚的请求
  * EndTransaction processor: process commit and rollback message
  */
 public class EndTransactionProcessor implements NettyRequestProcessor {
@@ -50,6 +50,12 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
         this.brokerController = brokerController;
     }
 
+    /**
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws
             RemotingCommandException {
@@ -122,30 +128,44 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
                     return null;
             }
         }
+        //主要逻辑
+
         OperationResult result = new OperationResult();
+        //是事务提交的类型
         if (MessageSysFlag.TRANSACTION_COMMIT_TYPE == requestHeader.getCommitOrRollback()) {
+            //获取半消息
             result = this.brokerController.getTransactionalMessageService().commitMessage(requestHeader);
+            //找到了
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
+                //基本检查
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
+                    //组装成新的  MessageExtBrokerInner
+                    //替换消息的topic为真是的业务topic queueId为真实的业务Id
                     MessageExtBrokerInner msgInner = endMessageTransaction(result.getPrepareMessage());
                     msgInner.setSysFlag(MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), requestHeader.getCommitOrRollback()));
                     msgInner.setQueueOffset(requestHeader.getTranStateTableOffset());
                     msgInner.setPreparedTransactionOffset(requestHeader.getCommitLogOffset());
                     msgInner.setStoreTimestamp(result.getPrepareMessage().getStoreTimestamp());
+                    //存入commitLog中
                     RemotingCommand sendResult = sendFinalMessage(msgInner);
                     if (sendResult.getCode() == ResponseCode.SUCCESS) {
+                        //删除事务半消息  不是真正的从halfTopic对应的队列中删除  是又向另一个opHalfTopic中加入了一条消息
+                        //TODO？ 疑问  endMessageTransaction 这个方法中设置了         msgInner.setWaitStoreMsgOK(false); 那就不会同步关心刷盘的结果
+                        //这样的化刷盘失败 并且消息还没有被消息 也会丢失吧？
                         this.brokerController.getTransactionalMessageService().deletePrepareMessage(result.getPrepareMessage());
                     }
                     return sendResult;
                 }
                 return res;
             }
+            //是事务回滚的类型
         } else if (MessageSysFlag.TRANSACTION_ROLLBACK_TYPE == requestHeader.getCommitOrRollback()) {
             result = this.brokerController.getTransactionalMessageService().rollbackMessage(requestHeader);
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
+                    //只是操作了删除 向另一个opHalfTopic中加入了一条消息 存储的halfTopic的逻辑偏移
                     this.brokerController.getTransactionalMessageService().deletePrepareMessage(result.getPrepareMessage());
                 }
                 return res;
@@ -191,6 +211,12 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
         return response;
     }
 
+    /**
+     * 组装真是的业务消息
+     *
+     * @param msgExt
+     * @return
+     */
     private MessageExtBrokerInner endMessageTransaction(MessageExt msgExt) {
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
         msgInner.setTopic(msgExt.getUserProperty(MessageConst.PROPERTY_REAL_TOPIC));
@@ -201,6 +227,7 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
         msgInner.setBornHost(msgExt.getBornHost());
         msgInner.setStoreHost(msgExt.getStoreHost());
         msgInner.setReconsumeTimes(msgExt.getReconsumeTimes());
+        //异步刷盘相当于
         msgInner.setWaitStoreMsgOK(false);
         msgInner.setTransactionId(msgExt.getUserProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX));
         msgInner.setSysFlag(msgExt.getSysFlag());
@@ -211,11 +238,18 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
         msgInner.setTagsCode(tagsCodeValue);
         MessageAccessor.setProperties(msgInner, msgExt.getProperties());
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgExt.getProperties()));
+        //清空两个属性
         MessageAccessor.clearProperty(msgInner, MessageConst.PROPERTY_REAL_TOPIC);
         MessageAccessor.clearProperty(msgInner, MessageConst.PROPERTY_REAL_QUEUE_ID);
         return msgInner;
     }
 
+    /**
+     * 保存消息
+     *
+     * @param msgInner
+     * @return
+     */
     private RemotingCommand sendFinalMessage(MessageExtBrokerInner msgInner) {
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
         final PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
@@ -223,6 +257,7 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
             switch (putMessageResult.getPutMessageStatus()) {
                 // Success
                 case PUT_OK:
+                    //下边的在事务消息变为真实消息发送中 应该不会有  设置的不关心刷盘结果
                 case FLUSH_DISK_TIMEOUT:
                 case FLUSH_SLAVE_TIMEOUT:
                 case SLAVE_NOT_AVAILABLE:
