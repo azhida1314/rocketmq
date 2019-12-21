@@ -191,6 +191,7 @@ public class TransactionalMessageBridge {
 
     /**
      * 替换topic和queueId
+     * 异常事务消息的属性 变成 非事务消息
      *
      * @param msgInner
      * @return

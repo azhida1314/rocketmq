@@ -151,6 +151,8 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
                     RemotingCommand sendResult = sendFinalMessage(msgInner);
                     if (sendResult.getCode() == ResponseCode.SUCCESS) {
                         //删除事务半消息  不是真正的从halfTopic对应的队列中删除  是又向另一个opHalfTopic中加入了一条消息
+                        //消息内容对应 halfTopic 的queueOffSet 并将 tags属性设置为'd'
+
                         //TODO？ 疑问  endMessageTransaction 这个方法中设置了         msgInner.setWaitStoreMsgOK(false); 那就不会同步关心刷盘的结果
                         //这样的化刷盘失败 并且消息还没有被消息 也会丢失吧？
                         this.brokerController.getTransactionalMessageService().deletePrepareMessage(result.getPrepareMessage());
