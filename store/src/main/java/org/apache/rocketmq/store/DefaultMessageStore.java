@@ -1477,6 +1477,10 @@ public class DefaultMessageStore implements MessageStore {
         }, 6, TimeUnit.SECONDS);
     }
 
+    /**
+     *  构建逻辑的消费队列
+     *  只有事务的提交消息 或者非事务消息  才会进行 dispatch
+     */
     class CommitLogDispatcherBuildConsumeQueue implements CommitLogDispatcher {
 
         @Override

@@ -149,7 +149,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 newTopic,
                 subscriptionGroupConfig.getRetryQueueNums(),
                 PermName.PERM_WRITE | PermName.PERM_READ, topicSysFlag);
-        if (null == topicConfig) {//
+        if (null == topicConfig) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark("topic[" + newTopic + "] not exist");
             return response;

@@ -201,10 +201,12 @@ public class TransactionalMessageBridge {
         //保存真实的queueId到属性REAL_QID
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_QUEUE_ID,
                 String.valueOf(msgInner.getQueueId()));
-        //修改属性值为 TRANSACTION_NOT_TYPE 以便在后边 broker会构建逻辑消费队列
+        //把属性值由事务消息  变成非事务消息  因为在后边  dispatch时 只会对非事务消息  和事务的提交消息构建逻辑的消费队列
+        //org.apache.rocketmq.store.DefaultMessageStore.CommitLogDispatcherBuildConsumeQueue.dispatch
         msgInner.setSysFlag(
                 MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), MessageSysFlag.TRANSACTION_NOT_TYPE));
         //替换成 RMQ_SYS_TRANS_HALF_TOPIC
+        //想要不被消费端消费 只要不在消费者订阅的topic下消费队列构建消息就可以
         msgInner.setTopic(TransactionalMessageUtil.buildHalfTopic());
         //半消息队列只有一个 默认0
         msgInner.setQueueId(0);
